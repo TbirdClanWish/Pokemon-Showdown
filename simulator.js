@@ -78,6 +78,7 @@ class BattlePlayer {
 		this.name = user.name;
 		this.game = game;
 		user.games[this.game.id] = this.game;
+		user.updateSearch();
 
 		this.slot = slot;
 		this.slotNum = Number(slot.charAt(1)) - 1;
@@ -85,7 +86,7 @@ class BattlePlayer {
 
 		for (let i = 0; i < user.connections.length; i++) {
 			let connection = user.connections[i];
-			Sockets.subchannelMove(connection.worker, this.id, this.slotNum + 1, connection.socketid);
+			Sockets.subchannelMove(connection.worker, this.game.id, this.slotNum + 1, connection.socketid);
 		}
 	}
 	destroy() {
@@ -93,9 +94,10 @@ class BattlePlayer {
 		let user = Users(this.userid);
 		if (user) {
 			delete user.games[this.game.id];
+			user.updateSearch();
 			for (let j = 0; j < user.connections.length; j++) {
 				let connection = user.connections[j];
-				Sockets.subchannelMove(connection.worker, this.id, '0', connection.socketid);
+				Sockets.subchannelMove(connection.worker, this.game.id, '0', connection.socketid);
 			}
 		}
 		this.game[this.slot] = null;
@@ -103,12 +105,12 @@ class BattlePlayer {
 	updateSubchannel(user) {
 		if (!user.connections) {
 			// "user" is actually a connection
-			Sockets.subchannelMove(user.worker, this.id, this.slotNum + 1, user.socketid);
+			Sockets.subchannelMove(user.worker, this.game.id, this.slotNum + 1, user.socketid);
 			return;
 		}
 		for (let i = 0; i < user.connections.length; i++) {
 			let connection = user.connections[i];
-			Sockets.subchannelMove(connection.worker, this.id, this.slotNum + 1, connection.socketid);
+			Sockets.subchannelMove(connection.worker, this.game.id, this.slotNum + 1, connection.socketid);
 		}
 	}
 
@@ -136,7 +138,8 @@ class Battle {
 
 		this.id = room.id;
 		this.room = room;
-		this.title = "Battle";
+		this.title = Tools.getFormat(format).name;
+		if (!this.title.endsWith(" Battle")) this.title += " Battle";
 		this.allowRenames = !rated;
 
 		this.format = toId(format);
@@ -183,6 +186,12 @@ class Battle {
 		if (!this.p2 || !this.p2.active) return false;
 		return true;
 	}
+	choose(user, data) {
+		this.sendFor(user, 'choose', data);
+	}
+	undo(user, data) {
+		this.sendFor(user, 'undo', data);
+	}
 
 	receive(lines) {
 		Monitor.activeIp = this.activeIp;
@@ -205,6 +214,7 @@ class Battle {
 			if (!this.ended) {
 				this.ended = true;
 				this.room.win(lines[2]);
+				this.removeAllPlayers();
 			}
 			break;
 
@@ -235,11 +245,11 @@ class Battle {
 			break;
 
 		case 'inactiveside':
-			this.inactiveSide = parseInt(lines[2], 10);
+			this.inactiveSide = parseInt(lines[2]);
 			break;
 
 		case 'score':
-			this.score = [parseInt(lines[2], 10), parseInt(lines[3], 10)];
+			this.score = [parseInt(lines[2]), parseInt(lines[3])];
 			break;
 		}
 		Monitor.activeIp = null;
@@ -265,7 +275,7 @@ class Battle {
 		let player = this.players[oldid];
 		if (player) {
 			if (!this.allowRenames && user.userid !== oldid) {
-				this.room.forfeit(user, " forfeited by changing their name.");
+				this.forfeit(user, " forfeited by changing their name.");
 				return;
 			}
 			if (!this.players[user]) {
@@ -309,6 +319,31 @@ class Battle {
 	tie() {
 		this.send('tie');
 	}
+	forfeit(user, message, side) {
+		if (this.ended || !this.started) return false;
+
+		if (!message) message = ' forfeited.';
+
+		if (side === undefined) {
+			if (user in this.players) side = this.players[user].slotNum;
+		}
+		if (side === undefined) return false;
+
+		let ids = ['p1', 'p2'];
+		let otherids = ['p2', 'p1'];
+
+		let name = 'Player ' + (side + 1);
+		if (user) {
+			name = user.name;
+		} else if (this.rated) {
+			name = this.rated[ids[side]];
+		}
+
+		this.room.add('|-message|' + name + message);
+		this.endType = 'forfeit';
+		this.send('win', otherids[side]);
+		return true;
+	}
 
 	addPlayer(user) {
 		if (user.userid in this.players) return false;
@@ -345,6 +380,14 @@ class Battle {
 		delete this.players[user.userid];
 		this.playerCount--;
 		return true;
+	}
+
+	removeAllPlayers() {
+		for (let i in this.players) {
+			this.players[i].destroy();
+			delete this.players[i];
+			this.playerCount--;
+		}
 	}
 
 	destroy() {

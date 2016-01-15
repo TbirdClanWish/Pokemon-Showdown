@@ -76,7 +76,7 @@ exports.commands = {
 	avatar: function (target, room, user) {
 		if (!target) return this.parse('/avatars');
 		let parts = target.split(',');
-		let avatar = parseInt(parts[0], 10);
+		let avatar = parseInt(parts[0]);
 		if (parts[0] === '#bw2elesa' || parts[0] === '#teamrocket' || parts[0] === '#yellow') {
 			avatar = parts[0];
 		}
@@ -977,7 +977,7 @@ exports.commands = {
 		Rooms.global.autojoinRooms(user, connection);
 		let targets = target.split(',');
 		let autojoins = [];
-		if (targets.length > 9 || Object.keys(connection.rooms).length > 1) return;
+		if (targets.length > 11 || Object.keys(connection.rooms).length > 1) return;
 		for (let i = 0; i < targets.length; i++) {
 			if (user.tryJoinRoom(targets[i], connection) === null) {
 				autojoins.push(targets[i]);
@@ -1455,6 +1455,24 @@ exports.commands = {
 	},
 	promotehelp: ["/promote [username], [group] - Promotes the user to the specified group. Requires: & ~"],
 
+	confirmuser: function (target) {
+		if (!target) return this.parse('/help confirmuser');
+		if (!this.can('promote')) return;
+
+		target = this.splitTarget(target, true);
+		let targetUser = this.targetUser;
+		let userid = toId(this.targetUsername);
+		let name = targetUser ? targetUser.name : this.targetUsername;
+
+		if (!userid) return this.parse('/help confirmuser');
+		if (!targetUser) return this.errorReply("User '" + name + "' is not online.");
+
+		if (targetUser.confirmed) return this.errorReply("User '" + name + "' is already confirmed.");
+
+		targetUser.setGroup(' ', true);
+	},
+	confirmuserhelp: ["/confirmuser [username] - Confirms the user (makes them immune to locks). Requires: & ~"],
+
 	globaldemote: 'demote',
 	demote: function (target) {
 		if (!target) return this.parse('/help demote');
@@ -1502,7 +1520,7 @@ exports.commands = {
 			if (error) return this.errorReply(error);
 		}
 
-		target = target.toLowerCase();
+		target = target.toLowerCase().trim();
 		let currentModchat = room.modchat;
 		switch (target) {
 		case 'off':
@@ -1521,6 +1539,7 @@ exports.commands = {
 			/* falls through */
 		default: {
 			if (!Config.groups[target]) {
+				this.errorReply("The rank '" + target + '" was unrecognized as a modchat level.');
 				return this.parse('/help modchat');
 			}
 			if (Config.groupsranking.indexOf(target) > 1 && !user.can('modchatall', null, room)) {
@@ -1686,7 +1705,7 @@ exports.commands = {
 
 		// Let's check the number of lines to retrieve or if it's a word instead
 		if (!target.match('[^0-9]')) {
-			lines = parseInt(target || 20, 10);
+			lines = parseInt(target || 20);
 			if (lines > 100) lines = 100;
 		}
 		let wordSearch = (!lines || lines < 0);
@@ -1836,6 +1855,7 @@ exports.commands = {
 			}
 		} else if (target === 'learnsets' || target === 'validator') {
 			TeamValidator.ValidatorProcess.respawn();
+			return this.sendReply("The team validator has been hotpatched. Any battles started after now will have teams be validated according to the new code.");
 		} else if (target.startsWith('disable')) {
 			if (Monitor.hotpatchLock) return this.errorReply("Hotpatch is already disabled.");
 			let reason = target.split(', ')[1];
@@ -1849,7 +1869,8 @@ exports.commands = {
 		"Hot-patching has greater memory requirements than restarting.",
 		"/hotpatch chat - reload commands.js and the chat-plugins",
 		"/hotpatch battles - spawn new simulator processes",
-		"/hotpatch formats - reload the tools.js tree, rebuild and rebroad the formats list, and also spawn new simulator processes",
+		"/hotpatch validator - spawn new team validator processes",
+		"/hotpatch formats - reload the tools.js tree, rebuild and rebroad the formats list, and spawn new simulator and team validator processes",
 		"/hotpatch disable, [reason] - disables the use of hotpatch until the next server restart"],
 
 	savelearnsets: function (target, room, user) {
@@ -2179,25 +2200,25 @@ exports.commands = {
 		}
 		function getPokemon(input) {
 			if (/^[0-9]+$/.test(input)) {
-				return '.pokemon[' + (parseInt(input, 10) - 1) + ']';
+				return '.pokemon[' + (parseInt(input) - 1) + ']';
 			}
 			return ".pokemon.find(function(p){return p.speciesid==='" + toId(targets[1]) + "'})";
 		}
 		switch (cmd) {
 		case 'hp':
 		case 'h':
-			room.battle.send('eval', "let p=" + getPlayer(targets[0]) + getPokemon(targets[1]) + ";p.sethp(" + parseInt(targets[2], 10) + ");if (p.isActive)battle.add('-damage',p,p.getHealth);");
+			room.battle.send('eval', "let p=" + getPlayer(targets[0]) + getPokemon(targets[1]) + ";p.sethp(" + parseInt(targets[2]) + ");if (p.isActive)battle.add('-damage',p,p.getHealth);");
 			break;
 		case 'status':
 		case 's':
 			room.battle.send('eval', "let pl=" + getPlayer(targets[0]) + ";let p=pl" + getPokemon(targets[1]) + ";p.setStatus('" + toId(targets[2]) + "');if (!p.isActive){battle.add('','please ignore the above');battle.add('-status',pl.active[0],pl.active[0].status,'[silent]');}");
 			break;
 		case 'pp':
-			room.battle.send('eval', "let pl=" + getPlayer(targets[0]) + ";let p=pl" + getPokemon(targets[1]) + ";p.moveset[p.moves.indexOf('" + toId(targets[2]) + "')].pp = " + parseInt(targets[3], 10));
+			room.battle.send('eval', "let pl=" + getPlayer(targets[0]) + ";let p=pl" + getPokemon(targets[1]) + ";p.moveset[p.moves.indexOf('" + toId(targets[2]) + "')].pp = " + parseInt(targets[3]));
 			break;
 		case 'boost':
 		case 'b':
-			room.battle.send('eval', "let p=" + getPlayer(targets[0]) + getPokemon(targets[1]) + ";battle.boost({" + toId(targets[2]) + ":" + parseInt(targets[3], 10) + "},p)");
+			room.battle.send('eval', "let p=" + getPlayer(targets[0]) + getPokemon(targets[1]) + ";battle.boost({" + toId(targets[2]) + ":" + parseInt(targets[3]) + "},p)");
 			break;
 		case 'volatile':
 		case 'v':
@@ -2241,12 +2262,51 @@ exports.commands = {
 	 *********************************************************/
 
 	forfeit: function (target, room, user) {
-		if (!room.battle) {
-			return this.errorReply("There's nothing to forfeit here.");
+		if (!room.game) return this.errorReply("This room doesn't have an active game.");
+		if (!room.game.forfeit) {
+			return this.errorReply("This kind of game can't be forfeited.");
 		}
-		if (!room.forfeit(user)) {
-			return this.errorReply("You can't forfeit this battle.");
+		if (!room.game.forfeit(user)) {
+			return this.errorReply("Forfeit failed.");
 		}
+	},
+
+	choose: function (target, room, user) {
+		if (!room.game) return this.errorReply("This room doesn't have an active game.");
+		if (!room.game.choose) return this.errorReply("This game doesn't support /choose");
+
+		room.game.choose(user, target);
+	},
+
+	mv: 'move',
+	attack: 'move',
+	move: function (target, room, user) {
+		if (!room.game) return this.errorReply("This room doesn't have an active game.");
+		if (!room.game.choose) return this.errorReply("This game doesn't support /choose");
+
+		room.game.choose(user, 'move ' + target);
+	},
+
+	sw: 'switch',
+	switch: function (target, room, user) {
+		if (!room.game) return this.errorReply("This room doesn't have an active game.");
+		if (!room.game.choose) return this.errorReply("This game doesn't support /choose");
+
+		room.game.choose(user, 'switch ' + parseInt(target));
+	},
+
+	team: function (target, room, user) {
+		if (!room.game) return this.errorReply("This room doesn't have an active game.");
+		if (!room.game.choose) return this.errorReply("This game doesn't support /choose");
+
+		room.game.choose(user, 'team ' + target);
+	},
+
+	undo: function (target, room, user) {
+		if (!room.game) return this.errorReply("This room doesn't have an active game.");
+		if (!room.game.undo) return this.errorReply("This game doesn't support /undo");
+
+		room.game.undo(user, target);
 	},
 
 	savereplay: function (target, room, user, connection) {
@@ -2276,39 +2336,6 @@ exports.commands = {
 				id: room.id.substr(7),
 			}));
 		});
-	},
-
-	mv: 'move',
-	attack: 'move',
-	move: function (target, room, user) {
-		if (!room.decision) return this.errorReply("You can only do this in battle rooms.");
-
-		room.decision(user, 'choose', 'move ' + target);
-	},
-
-	sw: 'switch',
-	switch: function (target, room, user) {
-		if (!room.decision) return this.errorReply("You can only do this in battle rooms.");
-
-		room.decision(user, 'choose', 'switch ' + parseInt(target, 10));
-	},
-
-	choose: function (target, room, user) {
-		if (!room.decision) return this.errorReply("You can only do this in battle rooms.");
-
-		room.decision(user, 'choose', target);
-	},
-
-	undo: function (target, room, user) {
-		if (!room.decision) return this.errorReply("You can only do this in battle rooms.");
-
-		room.decision(user, 'undo', target);
-	},
-
-	team: function (target, room, user) {
-		if (!room.decision) return this.errorReply("You can only do this in battle rooms.");
-
-		room.decision(user, 'choose', 'team ' + target);
 	},
 
 	addplayer: function (target, room, user) {
@@ -2463,6 +2490,9 @@ exports.commands = {
 		}
 		if (targetUser.blockChallenges && !user.can('bypassblocks', targetUser)) {
 			return this.popupReply("The user '" + this.targetUsername + "' is not accepting challenges right now.");
+		}
+		if (user.challengeTo) {
+			return this.popupReply("You're already challenging '" + user.challengeTo.to + "'. Cancel that challenge before challenging someone else.");
 		}
 		if (Config.pmmodchat) {
 			let userGroup = user.group;
@@ -2626,7 +2656,7 @@ exports.commands = {
 			commaIndex = target.indexOf(',');
 			targetRegistered = target;
 			if (commaIndex >= 0) {
-				targetRegistered = !!parseInt(target.substr(0, commaIndex), 10);
+				targetRegistered = !!parseInt(target.substr(0, commaIndex));
 				targetToken = target.substr(commaIndex + 1);
 			}
 		}
