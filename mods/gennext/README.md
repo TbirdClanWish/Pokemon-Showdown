@@ -123,8 +123,11 @@ Major changes:
 - Shuckle gets Berry Shell (select "Stick" in the teambuilder), which gives a
   50% boost to Defense and Sp. Def.
 
-- Ambipom gets Sketch as an event move, allowing it to use exactly one move
-  not normally in its learnset.
+- Ambipom, Spinda, and Mr. Mime get Sketch as an egg move, allowing it to use
+  exactly one move not normally in its learnset.
+
+- Spinda gets V-Create, Superpower, Close Combat, Overheat, Leaf Storm, Draco
+  Meteor.
 
 - Echoed Voice now has 80 base power, hits once, and then, 2 turns later,
   hits again for 80 base power. It's like Doom Desire, except it still hits
@@ -210,8 +213,9 @@ New mechanic: Signature Pokémon:
 
 New mechanic: Intrinsics:
 
-- Pokémon that previously get Levitate are now immune to Ground intrinsically.
-  Instead, they get new abilities in addition to their Ground immunity:
+- Pokémon that previously get Levitate are now immune to Ground intrinsically, although
+  Mold Breaker still bypasses this immunity. Instead, many of them get new abilities
+  in addition to their Ground immunity:
 
   - Azelf: Steadfast
 
@@ -232,6 +236,8 @@ New mechanic: Intrinsics:
   - Mesprit: Serene Grace
 
   - Mismagius: Cursed Body
+
+  - Rotom (all formes): Trace
 
   - Unown: Shadow Tag
 
@@ -383,8 +389,6 @@ Minor learnset changes:
 
 - Scolipede and Steelix get Coil
 
-- Spinda gets Superpower with no incompatibilities
-
 - Rotom formes learn more things:
   - Rotom-Wash: BubbleBeam
   - Rotom-Fan: Hurricane, Twister
@@ -476,6 +480,8 @@ Minor ability changes:
 
 - Gluttony allows a Pokémon to use a Berry twice
 
+- Heatproof now grants the user immunity to Fire and burns
+
 - Guts, Quick Feet, and Toxic Boost take half damage from poisoning
 
 - Guts, Quick Feet, and Flare Boost take half damage from burns
@@ -499,7 +505,7 @@ Minor item changes:
 Bans:
 
 - The OU banlist (i.e. Pokémon considered Uber) is now:
-  - Every Pokémon with over 600 BST except Slaking and Regigigas
+  - Every Pokémon with over 600 BST except Slaking, Regigigas, and Hoopa-Unbound
   - Deoxys (all formes)
   - Darkrai
   - Shaymin-Sky

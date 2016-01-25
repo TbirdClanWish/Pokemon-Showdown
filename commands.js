@@ -1563,7 +1563,7 @@ exports.commands = {
 			this.add("|raw|<div class=\"broadcast-red\"><b>Moderated chat was set to " + modchat + "!</b><br />Only users of rank " + modchat + " and higher can talk.</div>");
 		}
 		if (room.battle && !room.modchat && !user.can('modchat')) room.requestModchat(null);
-		this.logModCommand(user.name + " set modchat to " + room.modchat);
+		this.privateModCommand("(" + user.name + " set modchat to " + room.modchat + ")");
 
 		if (room.chatRoomData) {
 			room.chatRoomData.modchat = room.modchat;
@@ -1853,6 +1853,11 @@ exports.commands = {
 			} catch (e) {
 				return this.errorReply("Something failed while trying to hotpatch formats: \n" + e.stack);
 			}
+		} else if (target === 'loginserver') {
+			fs.unwatchFile('./config/custom.css');
+			CommandParser.uncacheTree('./loginserver.js');
+			global.LoginServer = require('./loginserver.js');
+			return this.sendReply("The login server has been hotpatched. New login server requests will use the new code.");
 		} else if (target === 'learnsets' || target === 'validator') {
 			TeamValidator.ValidatorProcess.respawn();
 			return this.sendReply("The team validator has been hotpatched. Any battles started after now will have teams be validated according to the new code.");
