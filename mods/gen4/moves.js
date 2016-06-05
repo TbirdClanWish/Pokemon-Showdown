@@ -64,27 +64,39 @@ exports.BattleMovedex = {
 			return 10;
 		},
 		desc: "Does one hit for the user and each other unfainted non-egg active and non-active Pokemon on the user's side without a status problem.",
+		onModifyMove: function (move, pokemon) {
+			move.type = '???';
+			move.category = 'Physical';
+		},
 		effect: {
 			duration: 1,
 			onStart: function (pokemon) {
-				this.effectData.index = 0;
-				while (!pokemon.side.pokemon[this.effectData.index] || pokemon.side.pokemon[this.effectData.index].fainted || pokemon.side.pokemon[this.effectData.index].status) {
-					this.effectData.index++;
+				let index = 0;
+				let team = pokemon.side.pokemon;
+				while (!team[index] || team[index].fainted || team[index].status) {
+					index++;
+					if (index >= team.length) break;
 				}
+				this.effectData.index = index;
 			},
 			onRestart: function (pokemon) {
+				let index = this.effectData.index;
+				let team = pokemon.side.pokemon;
 				do {
-					this.effectData.index++;
-					if (this.effectData.index >= 6) break;
-				} while (!pokemon.side.pokemon[this.effectData.index] || pokemon.side.pokemon[this.effectData.index].fainted || pokemon.side.pokemon[this.effectData.index].status);
+					index++;
+					if (index >= team.length) break;
+				} while (!team[index] || team[index].fainted || team[index].status);
+				this.effectData.index = index;
 			},
-			onModifyAtkPriority: 5,
+			onModifyAtkPriority: -101,
 			onModifyAtk: function (atk, pokemon) {
 				this.add('-activate', pokemon, 'move: Beat Up', '[of] ' + pokemon.side.pokemon[this.effectData.index].name);
+				this.event.modifier = 1;
 				return pokemon.side.pokemon[this.effectData.index].template.baseStats.atk;
 			},
-			onFoeModifyDefPriority: 5,
+			onFoeModifyDefPriority: -101,
 			onFoeModifyDef: function (def, pokemon) {
+				this.event.modifier = 1;
 				return pokemon.template.baseStats.def;
 			},
 		},
@@ -135,6 +147,10 @@ exports.BattleMovedex = {
 	bonerush: {
 		inherit: true,
 		accuracy: 80,
+	},
+	bravebird: {
+		inherit: true,
+		recoil: [1, 3],
 	},
 	brickbreak: {
 		inherit: true,
@@ -190,8 +206,8 @@ exports.BattleMovedex = {
 	},
 	crushgrip: {
 		inherit: true,
-		basePowerCallback: function (pokemon) {
-			return Math.floor(pokemon.hp * 120 / pokemon.maxhp) + 1;
+		basePowerCallback: function (pokemon, target) {
+			return Math.floor(target.hp * 120 / target.maxhp) + 1;
 		},
 	},
 	curse: {
@@ -327,6 +343,10 @@ exports.BattleMovedex = {
 			return null;
 		},
 	},
+	doubleedge: {
+		inherit: true,
+		recoil: [1, 3],
+	},
 	drainpunch: {
 		inherit: true,
 		basePower: 60,
@@ -388,13 +408,13 @@ exports.BattleMovedex = {
 			onEnd: function (target) {
 				this.add('-end', target, 'Encore');
 			},
-			onModifyPokemon: function (pokemon) {
+			onDisableMove: function (pokemon) {
 				if (!this.effectData.move || !pokemon.hasMove(this.effectData.move)) {
 					return;
 				}
 				for (let i = 0; i < pokemon.moveset.length; i++) {
 					if (pokemon.moveset[i].id !== this.effectData.move) {
-						pokemon.moveset[i].disabled = true;
+						pokemon.disableMove(pokemon.moveset[i].id);
 					}
 				}
 			},
@@ -460,14 +480,15 @@ exports.BattleMovedex = {
 			return 20;
 		},
 	},
+	flareblitz: {
+		inherit: true,
+		recoil: [1, 3],
+	},
 	focuspunch: {
 		inherit: true,
 		beforeMoveCallback: function () { },
 		onTry: function (pokemon) {
-			if (!pokemon.removeVolatile('focuspunch')) {
-				return;
-			}
-			if (pokemon.lastAttackedBy && pokemon.lastAttackedBy.damage && pokemon.lastAttackedBy.thisTurn) {
+			if (pokemon.volatiles['focuspunch'] && pokemon.volatiles['focuspunch'].lostFocus) {
 				this.attrLastMove('[still]');
 				this.add('cant', pokemon, 'Focus Punch', 'Focus Punch');
 				return false;
@@ -1190,9 +1211,9 @@ exports.BattleMovedex = {
 				if (pokemon.volatiles['substitute']) {
 					return;
 				} else if (this.effectData.layers >= 2) {
-					pokemon.trySetStatus('tox');
+					pokemon.trySetStatus('tox', pokemon.side.foe.active[0]);
 				} else {
-					pokemon.trySetStatus('psn');
+					pokemon.trySetStatus('psn', pokemon.side.foe.active[0]);
 				}
 			},
 		},
@@ -1204,6 +1225,10 @@ exports.BattleMovedex = {
 	uproar: {
 		inherit: true,
 		basePower: 50,
+	},
+	volttackle: {
+		inherit: true,
+		recoil: [1, 3],
 	},
 	whirlpool: {
 		inherit: true,
@@ -1232,6 +1257,10 @@ exports.BattleMovedex = {
 			},
 		},
 	},
+	woodhammer: {
+		inherit: true,
+		recoil: [1, 3],
+	},
 	worryseed: {
 		inherit: true,
 		onTryHit: function (pokemon) {
@@ -1247,8 +1276,8 @@ exports.BattleMovedex = {
 	},
 	wringout: {
 		inherit: true,
-		basePowerCallback: function (pokemon) {
-			return Math.floor(pokemon.hp * 120 / pokemon.maxhp) + 1;
+		basePowerCallback: function (pokemon, target) {
+			return Math.floor(target.hp * 120 / target.maxhp) + 1;
 		},
 	},
 	magikarpsrevenge: null,

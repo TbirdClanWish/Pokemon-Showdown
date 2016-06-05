@@ -58,7 +58,48 @@ exports.BattleMovedex = {
 	beatup: {
 		inherit: true,
 		basePower: 10,
-		basePowerCallback: undefined,
+		basePowerCallback: function (pokemon, target) {
+			pokemon.addVolatile('beatup');
+			if (!pokemon.side.pokemon[pokemon.volatiles.beatup.index]) return null;
+			return 10;
+		},
+		desc: "Does one hit for the user and each other unfainted non-egg active and non-active Pokemon on the user's side without a status problem.",
+		onModifyMove: function (move, pokemon) {
+			move.type = '???';
+			move.category = 'Physical';
+		},
+		effect: {
+			duration: 1,
+			onStart: function (pokemon) {
+				let index = 0;
+				let team = pokemon.side.pokemon;
+				while (!team[index] || team[index].fainted || team[index].status) {
+					index++;
+					if (index >= team.length) break;
+				}
+				this.effectData.index = index;
+			},
+			onRestart: function (pokemon) {
+				let index = this.effectData.index;
+				let team = pokemon.side.pokemon;
+				do {
+					index++;
+					if (index >= team.length) break;
+				} while (!team[index] || team[index].fainted || team[index].status);
+				this.effectData.index = index;
+			},
+			onModifyAtkPriority: -101,
+			onModifyAtk: function (atk, pokemon) {
+				this.add('-activate', pokemon, 'move: Beat Up', '[of] ' + pokemon.side.pokemon[this.effectData.index].name);
+				this.event.modifier = 1;
+				return pokemon.side.pokemon[this.effectData.index].template.baseStats.atk;
+			},
+			onFoeModifyDefPriority: -101,
+			onFoeModifyDef: function (def, pokemon) {
+				this.event.modifier = 1;
+				return pokemon.template.baseStats.def;
+			},
+		},
 	},
 	bide: {
 		inherit: true,
@@ -232,6 +273,10 @@ exports.BattleMovedex = {
 			return null;
 		},
 	},
+	doubleedge: {
+		inherit: true,
+		recoil: [1, 3],
+	},
 	dreameater: {
 		inherit: true,
 		desc: "Deals damage to one adjacent target, if it is asleep and does not have a Substitute. The user recovers half of the HP lost by the target, rounded up. If Big Root is held by the user, the HP recovered is 1.3x normal, rounded half down.",
@@ -354,10 +399,7 @@ exports.BattleMovedex = {
 		inherit: true,
 		beforeMoveCallback: function () { },
 		onTry: function (pokemon) {
-			if (!pokemon.removeVolatile('focuspunch')) {
-				return;
-			}
-			if (pokemon.lastAttackedBy && pokemon.lastAttackedBy.damage && pokemon.lastAttackedBy.thisTurn) {
+			if (pokemon.volatiles['focuspunch'] && pokemon.volatiles['focuspunch'].lostFocus) {
 				this.attrLastMove('[still]');
 				this.add('cant', pokemon, 'Focus Punch', 'Focus Punch');
 				return false;
@@ -679,6 +721,7 @@ exports.BattleMovedex = {
 		inherit: true,
 		pp: 10,
 		effect: {
+			noCopy: true,
 			onStart: function (target) {
 				this.effectData.layers = 1;
 				this.add('-start', target, 'stockpile' + this.effectData.layers);

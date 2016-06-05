@@ -10,7 +10,7 @@ function calculatePoints(category, question) {
 
 let jeopardies = {};
 
-let JeopardyQuestions = (function () {
+let JeopardyQuestions = (() => {
 	function JeopardyQuestions(room, categoryCount, questionCount) {
 		this.room = room;
 		this.categoryCount = categoryCount;
@@ -104,7 +104,7 @@ let JeopardyQuestions = (function () {
 	return JeopardyQuestions;
 })();
 
-let Jeopardy = (function () {
+let Jeopardy = (() => {
 	function Jeopardy(host, room, categoryCount, questionCount) {
 		this.host = host;
 		this.room = room;
@@ -133,7 +133,7 @@ let Jeopardy = (function () {
 		let checks = Array.prototype.slice.call(arguments, 2);
 
 		let currentCheck = '';
-		while (!!(currentCheck = checks.pop())) {
+		while ((currentCheck = checks.pop())) {
 			switch (currentCheck) {
 			case 'started':
 				if (this.isStarted) break;
@@ -243,7 +243,7 @@ let Jeopardy = (function () {
 		this.questions.setRevealed(category, question, true);
 		--this.remainingQuestions;
 
-		this.users.forEach(function (userData) {
+		this.users.forEach(userData => {
 			userData.isAnswered = false;
 		});
 
@@ -433,16 +433,14 @@ let Jeopardy = (function () {
 
 	Jeopardy.prototype.end = function () {
 		let results = [];
-		for (let data, usersIterator = this.users.entries(); !!(data = usersIterator.next().value);) { // Replace with for-of loop when available
+		for (let data of this.users) {
 			results.push({user: data[0], points: data[1].points});
 		}
-		results.sort(function (a, b) {
-			return b.points - a.points;
-		});
+		results.sort((a, b) => b.points - a.points);
 
 		let winner = results.shift();
 		this.room.add("Congratulations to " + winner.user.name + " for winning the Jeopardy match with " + winner.points + " points!");
-		this.room.add("Other participants:\n" + results.map(function (data) { return data.user.name + ": " + data.points; }).join("\n"));
+		this.room.add("Other participants:\n" + results.map(data => data.user.name + ": " + data.points).join("\n"));
 
 		delete jeopardies[this.room.id];
 	};
@@ -489,7 +487,7 @@ function renderGrid(questions, mode) {
 
 let commands = {
 	help: function () {
-		if (!this.canBroadcast()) return;
+		if (!this.runBroadcast()) return;
 
 		this.sendReplyBox(
 			"All commands are run under /jeopardy or /jp. For example, /jeopardy viewgrid.<br />" +
@@ -512,7 +510,7 @@ let commands = {
 
 	'': 'viewgrid',
 	viewgrid: function (target, room, user) {
-		if (!this.canBroadcast()) return;
+		if (!this.runBroadcast()) return;
 
 		let jeopardy = jeopardies[room.id];
 		let questions = null;

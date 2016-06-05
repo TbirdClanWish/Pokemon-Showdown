@@ -36,13 +36,13 @@ let triviaData = {};
 try {
 	triviaData = require('../config/chat-plugins/triviadata.json');
 } catch (e) {} // file doesn't exist or contains invalid JSON
-if (!Object.isObject(triviaData)) triviaData = {};
-if (!Object.isObject(triviaData.leaderboard)) triviaData.leaderboard = {};
+if (!triviaData || typeof triviaData !== 'object') triviaData = {};
+if (!triviaData || typeof triviaData.leaderboard !== 'object') triviaData.leaderboard = {};
 if (!Array.isArray(triviaData.ladder)) triviaData.ladder = [];
 if (!Array.isArray(triviaData.questions)) triviaData.questions = [];
 if (!Array.isArray(triviaData.submissions)) triviaData.submissions = [];
 
-let writeTriviaData = (function () {
+let writeTriviaData = (() => {
 	let writing = false;
 	let writePending = false; // whether or not a new write is pending
 
@@ -60,9 +60,9 @@ let writeTriviaData = (function () {
 		}
 		writing = true;
 		let data = JSON.stringify(triviaData, null, 2);
-		fs.writeFile('config/chat-plugins/triviadata.json.0', data, function () {
+		fs.writeFile('config/chat-plugins/triviadata.json.0', data, () => {
 			// rename is atomic on POSIX, but will throw an error on Windows
-			fs.rename('config/chat-plugins/triviadata.json.0', 'config/chat-plugins/triviadata.json', function (err) {
+			fs.rename('config/chat-plugins/triviadata.json.0', 'config/chat-plugins/triviadata.json', err => {
 				if (err) {
 					// This should only happen on Windows
 					fs.writeFile('config/chat-plugins/triviadata.json', data, finishWriting);
@@ -137,7 +137,7 @@ if (triviaRoom) {
 	}
 }
 
-let Trivia = (function () {
+let Trivia = (() => {
 	function Trivia(mode, category, scoreCap, room) {
 		this.room = room;
 		this.mode = mode;
@@ -161,7 +161,7 @@ let Trivia = (function () {
 		if (this.participants.has(user.userid)) return output.sendReply("You have already signed up for this trivia game.");
 
 		let latestIp = user.latestIp;
-		for (let participantid, participantsIterator = this.participants.keys(); !!(participantid = participantsIterator.next().value);) { // replace with for-of loop once available
+		for (let participantid of this.participants.keys()) {
 			let participant = Users(participantid);
 			if (participant && participant.ips[latestIp]) return output.sendReply("You have already signed up for this trivia game.");
 		}
@@ -183,13 +183,13 @@ let Trivia = (function () {
 		if (this.participants.size < 3) return output.sendReply("The trivia game requires at least three participants in order to run.");
 
 		let userid = toId(target);
-		if (!userid) return output.sendReply("User '" + target + "' does not exist.");
+		if (!userid) return output.sendReply("User '" + target + "' not found.");
 		if (!this.participants.has(userid)) return output.sendReply("User '" + target + "' is not a participant in this trivia game.");
 
 		let responderIndex = this.participants.delete(userid).responderIndex;
 		if (this.phase === 'question' && responderIndex >= 0) {
 			this.responderIndex--;
-			this.participants.forEach(function (scoreData) {
+			this.participants.forEach(scoreData => {
 				if (scoreData.responderIndex > responderIndex) {
 					scoreData.responderIndex--;
 				}
@@ -204,9 +204,9 @@ let Trivia = (function () {
 		if (this.participants.size < 3) return output.sendReply("Not enough users have signed up yet! Trivia games require at least three participants to run.");
 
 		if (this.category === 'random') {
-			this.currentQuestions = triviaData.questions.randomize();
+			this.currentQuestions = Tools.shuffle(triviaData.questions.slice());
 		} else {
-			this.currentQuestions = sliceCategory(this.category).randomize();
+			this.currentQuestions = Tools.shuffle(sliceCategory(this.category).slice());
 		}
 
 		if (!this.currentQuestions.length) {
@@ -233,14 +233,14 @@ let Trivia = (function () {
 
 		switch (this.mode) {
 		case 'first':
-			this.phaseTimeout = setTimeout(this.noAnswer.bind(this), QUESTION_PERIOD);
+			this.phaseTimeout = setTimeout(() => this.noAnswer(), QUESTION_PERIOD);
 			break;
 		case 'timer':
 			this.askedAt = Date.now();
-			this.phaseTimeout = setTimeout(this.timerAnswers.bind(this), QUESTION_PERIOD);
+			this.phaseTimeout = setTimeout(() => this.timerAnswers(), QUESTION_PERIOD);
 			break;
 		case 'number':
-			this.phaseTimeout = setTimeout(this.numberAnswers.bind(this), QUESTION_PERIOD);
+			this.phaseTimeout = setTimeout(() => this.numberAnswers(), QUESTION_PERIOD);
 			break;
 		}
 	};
@@ -300,7 +300,7 @@ let Trivia = (function () {
 		this.phase = 'intermission';
 
 		let isActive = false;
-		for (let scoreData, participantsIterator = this.participants.values(); !!(scoreData = participantsIterator.next().value);) { // replace with for-of loop once available
+		for (let scoreData of this.participants.values()) {
 			if (scoreData.answered) {
 				scoreData.answered = false;
 				isActive = true;
@@ -320,7 +320,7 @@ let Trivia = (function () {
 			"Answer" + (this.currentAnswer.length > 1 ? "s: " : ": ") + this.currentAnswer.join(", ") + "<br />" +
 			"Nobody gained any points.</div>"
 		).update();
-		this.phaseTimeout = setTimeout(this.askQuestion.bind(this), INTERMISSION_PERIOD);
+		this.phaseTimeout = setTimeout(() => this.askQuestion(), INTERMISSION_PERIOD);
 	};
 
 	Trivia.prototype.firstAnswer = function (user) {
@@ -343,7 +343,7 @@ let Trivia = (function () {
 
 		if (!this.currentQuestions.length) return this.stalemate();
 
-		for (let participantsIterator = this.participants.values(); !!(scoreData = participantsIterator.next().value);) { // replace with for-of loop once available
+		for (let scoreData of this.participants.values()) {
 			scoreData.answered = false;
 		}
 
@@ -351,7 +351,7 @@ let Trivia = (function () {
 
 		buffer += "They gained <strong>5</strong> points!</div>";
 		this.room.addRaw(buffer);
-		this.phaseTimeout = setTimeout(this.askQuestion.bind(this), INTERMISSION_PERIOD);
+		this.phaseTimeout = setTimeout(() => this.askQuestion(), INTERMISSION_PERIOD);
 	};
 
 	Trivia.prototype.timerAnswers = function () {
@@ -369,7 +369,7 @@ let Trivia = (function () {
 			"<tr bgcolor=\"#6688AA\"><th width=\"100px\">Points gained</th><th>Correct</th></tr>";
 		let innerBuffer = [[], [], [], [], []];
 
-		for (let data, participantsIterator = this.participants.entries(); !!(data = participantsIterator.next().value);) { // replace with for-of loop once available
+		for (let data of this.participants) {
 			let scoreData = data[1];
 			scoreData.answered = false;
 			if (scoreData.responderIndex < 0) continue;
@@ -406,7 +406,7 @@ let Trivia = (function () {
 
 		buffer += "</table></div>";
 		this.room.addRaw(buffer).update();
-		this.phaseTimeout = setTimeout(this.askQuestion.bind(this), INTERMISSION_PERIOD);
+		this.phaseTimeout = setTimeout(() => this.askQuestion(), INTERMISSION_PERIOD);
 	};
 
 	Trivia.prototype.numberAnswers = function () {
@@ -420,7 +420,7 @@ let Trivia = (function () {
 		let points = ~~(5 - 4 * (this.correctResponders - 1) / (this.participants.size - 1 || 1));
 		let innerBuffer = [];
 
-		for (let data, participantsIterator = this.participants.entries(); !!(data = participantsIterator.next().value);) { // replace with for-of loop once available
+		for (let data of this.participants) {
 			let scoreData = data[1];
 			scoreData.answered = false;
 			if (scoreData.responderIndex < 0) continue;
@@ -454,7 +454,7 @@ let Trivia = (function () {
 		buffer += (this.correctResponders > 1 ? "Each of them" : "They") + " gained <strong>" + points + "</strong> point" + (points > 1 ? "s!</div>" : "!</div>");
 		this.correctResponders = 0;
 		this.room.addRaw(buffer).update();
-		this.phaseTimeout = setTimeout(this.askQuestion.bind(this), INTERMISSION_PERIOD);
+		this.phaseTimeout = setTimeout(() => this.askQuestion(), INTERMISSION_PERIOD);
 	};
 
 	Trivia.prototype.stalemate = function () {
@@ -469,7 +469,7 @@ let Trivia = (function () {
 		let leaderboard = triviaData.leaderboard;
 
 		// update leaderboard scores
-		for (let data, participantsIterator = this.participants.entries(); !!(data = participantsIterator.next().value);) { // replace with for-of loop once available
+		for (let data of this.participants) {
 			let scoreData = data[1];
 			if (!scoreData.score) continue;
 
@@ -487,9 +487,7 @@ let Trivia = (function () {
 		let leaders = Object.keys(leaderboard);
 		let ladder = triviaData.ladder = [];
 		for (let i = 0; i < 3; i++) {
-			leaders.sort(function (a, b) {
-				return leaderboard[b][i] - leaderboard[a][i];
-			});
+			leaders.sort((a, b) => leaderboard[b][i] - leaderboard[a][i]);
 
 			let max = Infinity;
 			let rank = 0;
@@ -537,7 +535,7 @@ let Trivia = (function () {
 
 		let participants = [];
 		let buffer = "There " + (participantsLen > 1 ? "are <strong>" + participantsLen + "</strong> players" : "is <strong>1</strong> player") + " participating in this trivia game:<br />";
-		this.participants.forEach(function (scoreData, participantid) {
+		this.participants.forEach((scoreData, participantid) => {
 			let participant = Users(participantid);
 			participants.push(participant ? participant.name : participantid);
 		});
@@ -768,11 +766,8 @@ let commands = {
 				indices.splice(i, 1);
 			}
 
-			indices = indices.sort(function (a, b) {
-				return a - b;
-			}).filter(function (entry, index) {
-				return !index || indices[index - 1] !== entry;
-			});
+			indices.sort((a, b) => a - b);
+			indices = indices.filter((entry, index) => !index || indices[index - 1] !== entry);
 
 			let indicesLen = indices.length;
 			if (!indicesLen) return this.errorReply("'" + target + "' is not a valid set of submission index numbers. View /trivia review and /help trivia for more information.");
@@ -827,7 +822,7 @@ let commands = {
 		let buffer = "|raw|<div class=\"ladder\"><table>";
 
 		if (!target) {
-			if (!this.canBroadcast()) return false;
+			if (!this.runBroadcast()) return false;
 
 			let questions = triviaData.questions;
 			let questionsLen = questions.length;
@@ -887,7 +882,7 @@ let commands = {
 	'': 'status',
 	status: function (target, room, user) {
 		if (room.id !== 'trivia') return this.errorReply('This command can only be used in Trivia.');
-		if (!this.canBroadcast()) return false;
+		if (!this.runBroadcast()) return false;
 		let trivium = trivia[room.id];
 		if (!trivium) return this.errorReply("There is no trivia game in progress.");
 		trivium.getStatus(this, user);
@@ -896,7 +891,7 @@ let commands = {
 
 	players: function (target, room) {
 		if (room.id !== 'trivia') return this.errorReply('This command can only be used in Trivia.');
-		if (!this.canBroadcast()) return false;
+		if (!this.runBroadcast()) return false;
 		let trivium = trivia[room.id];
 		if (!trivium) return this.errorReply("There is no trivia game in progress.");
 		trivium.getParticipants(this);
@@ -931,7 +926,7 @@ let commands = {
 
 	ladder: function (target, room) {
 		if (room.id !== 'trivia') return this.errorReply('This command can only be used in Trivia.');
-		if (!this.canBroadcast()) return false;
+		if (!this.runBroadcast()) return false;
 
 		let ladder = triviaData.ladder;
 		let leaderboard = triviaData.leaderboard;

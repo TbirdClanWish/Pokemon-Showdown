@@ -13,59 +13,22 @@
 
 'use strict';
 
-let battles = Object.create(null);
+const ProcessManager = require('./process-manager');
 
-let SimulatorProcess = (function () {
-	function SimulatorProcess() {
-		this.process = require('child_process').fork('battle-engine.js', {cwd: __dirname});
-		this.process.on('message', function (message) {
-			let lines = message.split('\n');
-			let battle = battles[lines[0]];
-			if (battle) {
-				battle.receive(lines);
-			}
-		});
-		this.send = this.process.send.bind(this.process);
-	}
-	SimulatorProcess.prototype.load = 0;
-	SimulatorProcess.prototype.active = true;
-	SimulatorProcess.processes = [];
-	SimulatorProcess.spawn = function (num) {
-		if (!num) num = Config.simulatorprocesses || 1;
-		for (let i = this.processes.length; i < num; ++i) {
-			this.processes.push(new SimulatorProcess());
-		}
-	};
-	SimulatorProcess.respawn = function () {
-		this.processes.splice(0).forEach(function (process) {
-			process.active = false;
-			if (!process.load) process.process.disconnect();
-		});
-		this.spawn();
-	};
-	SimulatorProcess.acquire = function () {
-		let process = this.processes[0];
-		for (let i = 1; i < this.processes.length; ++i) {
-			if (this.processes[i].load < process.load) {
-				process = this.processes[i];
-			}
-		}
-		process.load++;
-		return process;
-	};
-	SimulatorProcess.release = function (process) {
-		process.load--;
-		if (!process.load && !process.active) {
-			process.process.disconnect();
-		}
-	};
-	SimulatorProcess.eval = function (code) {
-		this.processes.forEach(function (process) {
+const SimulatorProcess = new ProcessManager({
+	maxProcesses: Config.simulatorprocesses,
+	execFile: 'battle-engine.js',
+	onMessageUpstream: function (message) {
+		let lines = message.split('\n');
+		let battle = this.pendingTasks.get(lines[0]);
+		if (battle) battle.receive(lines);
+	},
+	eval: function (code) {
+		for (let process of this.processes) {
 			process.send('|eval|' + code);
-		});
-	};
-	return SimulatorProcess;
-})();
+		}
+	},
+});
 
 // Create the initial set of simulator processes.
 SimulatorProcess.spawn();
@@ -132,10 +95,6 @@ class BattlePlayer {
 
 class Battle {
 	constructor(room, format, rated) {
-		if (battles[room.id]) {
-			throw new Error("Battle with ID " + room.id + " already exists.");
-		}
-
 		this.id = room.id;
 		this.room = room;
 		this.title = Tools.getFormat(format).name;
@@ -165,9 +124,12 @@ class Battle {
 		this.inactiveQueued = false;
 
 		this.process = SimulatorProcess.acquire();
-		this.send('init', this.format, rated ? '1' : '');
+		if (this.process.pendingTasks.has(room.id)) {
+			throw new Error("Battle with ID " + room.id + " already exists.");
+		}
 
-		battles[room.id] = this;
+		this.send('init', this.format, rated ? '1' : '');
+		this.process.pendingTasks.set(room.id, this);
 	}
 
 	send() {
@@ -310,27 +272,27 @@ class Battle {
 	onUpdateConnection(user, connection) {
 		this.onConnect(user, connection);
 	}
-	onRename(user, oldid) {
-		if (user.userid === oldid) return;
-		let player = this.players[oldid];
-		if (player) {
-			if (!this.allowRenames && user.userid !== oldid) {
-				this.forfeit(user, " forfeited by changing their name.");
-				return;
+	onRename(user, oldUserid) {
+		if (user.userid === oldUserid) return;
+		if (!(oldUserid in this.players)) {
+			if (user.userid in this.players) {
+				// this handles a user renaming themselves into a user in the
+				// battle (e.g. by using /nick)
+				this.onConnect(user);
 			}
-			if (!this.players[user]) {
-				this.players[user] = player;
-				player.userid = user.userid;
-				player.name = user.name;
-				delete this.players[oldid];
-				player.simSend('rename', user.name, user.avatar);
-			}
+			return;
 		}
-		if (!player && user in this.players) {
-			// this handles a user renaming themselves into a user in the
-			// battle (e.g. by using /nick)
-			this.onConnect(user);
+		if (!this.allowRenames) {
+			this.forfeit(user, " forfeited by changing their name.");
+			return;
 		}
+		if (user.userid in this.players) return;
+		let player = this.players[oldUserid];
+		this.players[user.userid] = player;
+		player.userid = user.userid;
+		player.name = user.name;
+		delete this.players[oldUserid];
+		player.simSend('rename', user.name, user.avatar);
 	}
 	onJoin(user) {
 		let player = this.players[user];
@@ -373,10 +335,8 @@ class Battle {
 		let otherids = ['p2', 'p1'];
 
 		let name = 'Player ' + (side + 1);
-		if (user) {
-			name = user.name;
-		} else if (this.rated) {
-			name = this.rated[ids[side]];
+		if (this[ids[side]]) {
+			name = this[ids[side]].name;
 		}
 
 		this.room.add('|-message|' + name + message);
@@ -447,18 +407,16 @@ class Battle {
 		}
 		this.players = null;
 		this.room = null;
-		SimulatorProcess.release(this.process);
+		this.process.pendingTasks.delete(this.id);
+		this.process.release();
 		this.process = null;
-		delete battles[this.id];
 	}
 }
 
 exports.BattlePlayer = BattlePlayer;
 exports.Battle = Battle;
-exports.battles = battles;
 exports.SimulatorProcess = SimulatorProcess;
 
 exports.create = function (id, format, rated, room) {
-	if (battles[id]) return battles[id];
 	return new Battle(room, format, rated);
 };

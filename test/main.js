@@ -7,7 +7,7 @@ const Module = require('module');
 
 const mock = require('mock-fs');
 
-const noop = function () {};
+const noop = () => {};
 
 function getDirTypedContentsSync(dir, forceType) {
 	// Return value can be fed to mock-fs
@@ -20,15 +20,12 @@ function getDirTypedContentsSync(dir, forceType) {
 
 function init(callback) {
 	require('./../app.js');
-	process.listeners('uncaughtException').forEach(function (listener) {
-		process.removeListener('uncaughtException', listener);
-	});
 
 	// Run the battle engine in the main process to keep our sanity
 	let BattleEngine = global.BattleEngine = require('./../battle-engine.js');
-	process.listeners('message').forEach(function (listener) {
+	for (let listener of process.listeners('message')) {
 		process.removeListener('message', listener);
-	});
+	}
 
 	// Turn IPC methods into no-op
 	BattleEngine.Battle.prototype.send = noop;
@@ -37,10 +34,10 @@ function init(callback) {
 	let Simulator = global.Simulator;
 	Simulator.Battle.prototype.send = noop;
 	Simulator.Battle.prototype.receive = noop;
-	Simulator.SimulatorProcess.processes.forEach(function (process) {
+	for (let process of Simulator.SimulatorProcess.processes) {
 		// Don't crash -we don't care of battle child processes.
 		process.process.on('error', noop);
-	});
+	}
 
 	LoginServer.disabled = true;
 
@@ -79,6 +76,9 @@ before('initialization', function (done) {
 		chatRoomsData.exports = []; // empty chatrooms list
 		chatRoomsData.loaded = true;
 	} catch (e) {}
+
+	// Actually crash if we crash
+	config.crashguard = false;
 
 	// Don't try to write to file system
 	config.logladderip = false;
@@ -145,13 +145,13 @@ before('initialization', function (done) {
 
 describe('Native timer/event loop globals', function () {
 	let globalList = ['setTimeout', 'clearTimeout', 'setImmediate', 'clearImmediate'];
-	globalList.forEach(function (elem) {
+	for (let elem of globalList) {
 		describe('`' + elem + '`', function () {
 			it('should be a global function', function () {
 				assert.strictEqual(typeof global[elem], 'function');
 			});
 		});
-	});
+	}
 });
 
 describe('Battle simulation', function () {

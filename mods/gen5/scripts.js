@@ -10,9 +10,8 @@ exports.BattleScripts = {
 		if (!template.exists || (!template.randomBattleMoves && !template.learnset)) {
 			template = this.getTemplate('unown');
 
-			let stack = 'Template incompatible with random battles: ' + name;
-			let fakeErr = {stack: stack};
-			require('./../../crashlogger.js')(fakeErr, 'The randbat set generator');
+			let err = new Error('Template incompatible with random battles: ' + name);
+			require('./../../crashlogger.js')(err, 'The randbat set generator');
 		}
 
 		if (template.battleOnly) name = template.baseSpecies;
@@ -371,9 +370,8 @@ exports.BattleScripts = {
 			};
 		}
 
-		let abilities = Object.values(baseTemplate.abilities).sort(function (a, b) {
-			return this.getAbility(b).rating - this.getAbility(a).rating;
-		}.bind(this));
+		let abilities = Object.values(baseTemplate.abilities);
+		abilities.sort((a, b) => this.getAbility(b).rating - this.getAbility(a).rating);
 		let ability0 = this.getAbility(abilities[0]);
 		let ability1 = this.getAbility(abilities[1]);
 		let ability2 = this.getAbility(abilities[2]);
@@ -451,11 +449,6 @@ exports.BattleScripts = {
 			if (abilities.indexOf('Swift Swim') >= 0 && hasMove['raindance']) {
 				ability = 'Swift Swim';
 			}
-		}
-
-		if (hasMove['gyroball'] || hasMove['trickroom']) {
-			ivs.spe = 0;
-			evs.spe = 0;
 		}
 
 		item = 'Leftovers';
@@ -571,7 +564,7 @@ exports.BattleScripts = {
 			item = 'Leftovers';
 		} else if (hasType['Poison']) {
 			item = 'Black Sludge';
-		} else if (this.getEffectiveness('Ground', template) >= 1 && ability !== 'Levitate' && !hasMove['magnetrise']) {
+		} else if (this.getImmunity('Ground', template) && this.getEffectiveness('Ground', template) >= 1 && ability !== 'Levitate' && !hasMove['magnetrise']) {
 			item = 'Air Balloon';
 		} else if (counter.Status <= 1 && ability !== 'Sturdy' && !hasMove['rapidspin']) {
 			item = 'Life Orb';
@@ -605,6 +598,11 @@ exports.BattleScripts = {
 			ivs.atk = hasMove['hiddenpower'] ? ivs.atk - 30 : 0;
 		}
 
+		if (hasMove['gyroball'] || hasMove['trickroom']) {
+			evs.spe = 0;
+			ivs.spe = 0;
+		}
+
 		return {
 			name: name,
 			moves: moves,
@@ -620,12 +618,12 @@ exports.BattleScripts = {
 		let pokemonLeft = 0;
 		let pokemon = [];
 
-		let excludedTiers = {'LC':1, 'LC Uber':1, 'NFE':1, 'CAP':1};
+		let excludedTiers = {'NFE':1, 'LC Uber':1, 'LC':1};
 
 		let pokemonPool = [];
 		for (let id in this.data.FormatsData) {
 			let template = this.getTemplate(id);
-			if (!excludedTiers[template.tier] && template.randomBattleMoves) {
+			if (!template.isNonstandard && !excludedTiers[template.tier] && template.randomBattleMoves) {
 				pokemonPool.push(id);
 			}
 		}
@@ -639,8 +637,8 @@ exports.BattleScripts = {
 
 		while (pokemonPool.length && pokemonLeft < 6) {
 			let template = this.getTemplate(this.sampleNoReplace(pokemonPool));
-			// Limit to one of each species; Spiky-eared Pichu is not available
-			if (!template.exists || template.gen >= this.gen || baseFormes[template.baseSpecies] || template.species === 'Pichu-Spiky-eared') continue;
+			// Limit to one of each species
+			if (!template.exists || template.gen >= this.gen || baseFormes[template.baseSpecies]) continue;
 
 			let tier = template.tier;
 			switch (tier) {

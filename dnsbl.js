@@ -20,7 +20,7 @@ let dns = require('dns');
 
 let Dnsbl = module.exports;
 
-let dnsblCache = exports.cache = new Map();
+let dnsblCache = Dnsbl.cache = new Map();
 dnsblCache.set('127.0.0.1', false);
 
 function queryDnsblLoop(ip, callback, reversedIpDot, index) {
@@ -31,15 +31,14 @@ function queryDnsblLoop(ip, callback, reversedIpDot, index) {
 		return;
 	}
 	let blocklist = BLOCKLISTS[index];
-	dns.resolve4(reversedIpDot + blocklist, function (err, addresses) {
+	dns.resolve4(reversedIpDot + blocklist, (err, addresses) => {
 		if (!err) {
 			// blocked
 			dnsblCache.set(ip, blocklist);
-			callback(blocklist);
-		} else {
-			// not blocked, try next blocklist
-			queryDnsblLoop(ip, callback, reversedIpDot, index + 1);
+			return callback(blocklist);
 		}
+		// not blocked, try next blocklist
+		queryDnsblLoop(ip, callback, reversedIpDot, index + 1);
 	});
 }
 
@@ -50,7 +49,7 @@ function queryDnsblLoop(ip, callback, reversedIpDot, index) {
  * if the passed IP is in a blocklist, or boolean false if the IP is
  * not in any blocklist.
  */
-exports.query = function queryDnsbl(ip, callback) {
+Dnsbl.query = function queryDnsbl(ip, callback) {
 	if (dnsblCache.has(ip)) {
 		callback(dnsblCache.get(ip));
 		return;
@@ -109,6 +108,10 @@ Dnsbl.reverse = function reverseDns(ip, callback) {
 		}
 		if (ip.startsWith('179.43.147.')) {
 			callback(null, ['privatelayer.proxy-nohost']);
+			return;
+		}
+		if (ip.startsWith('185.86.148.') || ip.startsWith('185.86.149.')) {
+			callback(null, ['yourserver.se.proxy-nohost']);
 			return;
 		}
 		if (rangeLeaseweb(ip) || rangeLeaseweb2(ip) || rangeLeaseweb3(ip) || rangeVoxility(ip)) {
@@ -180,7 +183,7 @@ Dnsbl.reverse = function reverseDns(ip, callback) {
 			return;
 		}
 	}
-	return require('dns').reverse(ip, function (err, hosts) {
+	return require('dns').reverse(ip, (err, hosts) => {
 		if (!hosts || !hosts[0]) {
 			if (ip.startsWith('50.')) {
 				hosts = ['comcast.net.res-nohost'];
