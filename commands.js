@@ -851,10 +851,7 @@ exports.commands = {
 			}
 		}
 		if (targetUser && targetUser.locked && !room.isPrivate && !room.battle && !room.isPersonal && (nextGroup === '%' || nextGroup === '@')) {
-			Monitor.log("[CrisisMonitor] " + user.name + " was automatically demoted in " + room.id + " for trying to promote locked user: " + targetUser.name + ".");
-			room.auth[user.userid] = '@';
-			user.updateIdentity(room.id);
-			return this.errorReply("You have been automatically deauthed for trying to promote locked user: '" + name + "'.");
+			return this.errorReply("Locked users can't be promoted.");
 		}
 
 		if (nextGroup === ' ') {
@@ -1223,6 +1220,7 @@ exports.commands = {
 			if (cmd === 'forcelock') {
 				let from = targetUser.deconfirm();
 				Monitor.log("[CrisisMonitor] " + name + " was locked by " + user.name + " and demoted from " + from.join(", ") + ".");
+				this.globalModlog("CRISISDEMOTE", targetUser, " from " + from.join(", "));
 			} else {
 				return this.sendReply("" + name + " is a confirmed user. If you are sure you would like to lock them use /forcelock.");
 			}
@@ -1281,6 +1279,7 @@ exports.commands = {
 			if (cmd === 'forcelock') {
 				let from = targetUser.deconfirm();
 				Monitor.log("[CrisisMonitor] " + name + " was locked by " + user.name + " and demoted from " + from.join(", ") + ".");
+				this.globalModlog("CRISISDEMOTE", targetUser, " from " + from.join(", "));
 			} else {
 				return this.sendReply("" + name + " is a confirmed user. If you are sure you would like to lock them use /forcelock.");
 			}
@@ -1363,6 +1362,7 @@ exports.commands = {
 			if (cmd === 'forceban') {
 				let from = targetUser.deconfirm();
 				Monitor.log("[CrisisMonitor] " + name + " was banned by " + user.name + " and demoted from " + from.join(", ") + ".");
+				this.globalModlog("CRISISDEMOTE", targetUser, " from " + from.join(", "));
 			} else {
 				return this.sendReply("" + name + " is a confirmed user. If you are sure you would like to ban them use /forceban.");
 			}
