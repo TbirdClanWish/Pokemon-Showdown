@@ -6,6 +6,7 @@ exports.BattleStatuses = {
 		onStart: function (target) {
 			this.add('-status', target, 'brn');
 		},
+		onAfterMoveSelfPriority: 3,
 		onAfterMoveSelf: function (pokemon) {
 			this.damage(pokemon.maxhp / 8);
 		},
@@ -64,6 +65,7 @@ exports.BattleStatuses = {
 		onStart: function (target) {
 			this.add('-status', target, 'psn');
 		},
+		onAfterMoveSelfPriority: 3,
 		onAfterMoveSelf: function (pokemon) {
 			this.damage(pokemon.maxhp / 8);
 		},
@@ -77,6 +79,7 @@ exports.BattleStatuses = {
 			this.add('-status', target, 'tox');
 			this.effectData.stage = 0;
 		},
+		onAfterMoveSelfPriority: 3,
 		onAfterMoveSelf: function (pokemon) {
 			if (this.effectData.stage < 15) {
 				this.effectData.stage++;
@@ -95,8 +98,6 @@ exports.BattleStatuses = {
 	confusion: {
 		inherit: true,
 		onStart: function (target, source, sourceEffect) {
-			let result = this.runEvent('TryConfusion', target, source, sourceEffect);
-			if (!result) return result;
 			if (sourceEffect && sourceEffect.id === 'lockedmove') {
 				this.add('-start', target, 'confusion', '[silent]');
 			} else {
@@ -166,22 +167,18 @@ exports.BattleStatuses = {
 	},
 	stall: {
 		duration: 2,
-		counterMax: 255,
 		onStart: function () {
-			this.effectData.counter = 255;
+			this.effectData.counter = 127;
 		},
 		onStallMove: function () {
 			// Gen 2 starts counting at x=255, x/256 and then halves x on every turn
-			let counter = this.effectData.counter || 255;
-			this.debug("Success chance: " + Math.round(counter / 256) + "% (" + counter + "/256)");
-			return (this.random(counter) === 0);
+			let counter = Math.floor(this.effectData.counter) || 127;
+			this.debug("Success chance: " + Math.round(counter * 1000 / 256) / 10 + "% (" + counter + "/256)");
+			return (this.random(256) < counter);
 		},
 		onRestart: function () {
-			if (this.effectData.counter > this.effect.counterMax) {
-				this.effectData.counter /= 2;
-				if (this.effectData.counter < 0) this.effectData.counter = 0;
-			}
-			this.effectData.duration = 255;
+			this.effectData.counter /= 2;
+			this.effectData.duration = 2;
 		},
 	},
 };

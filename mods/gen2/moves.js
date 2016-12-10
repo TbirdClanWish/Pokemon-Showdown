@@ -23,6 +23,62 @@ exports.BattleMovedex = {
 			this.boost({atk: 12});
 		},
 	},
+	bide: {
+		inherit: true,
+		effect: {
+			duration: 3,
+			durationCallback: function (target, source, effect) {
+				return this.random(3, 5);
+			},
+			onLockMove: 'bide',
+			onStart: function (pokemon) {
+				this.effectData.totalDamage = 0;
+				this.add('-start', pokemon, 'move: Bide');
+			},
+			onDamagePriority: -101,
+			onDamage: function (damage, target, source, move) {
+				if (!move || move.effectType !== 'Move' || !source) return;
+				this.effectData.totalDamage += damage;
+				this.effectData.lastDamageSource = source;
+			},
+			onBeforeMove: function (pokemon, target, move) {
+				if (this.effectData.duration === 1) {
+					this.add('-end', pokemon, 'move: Bide');
+					if (!this.effectData.totalDamage) {
+						this.add('-fail', pokemon);
+						return false;
+					}
+					target = this.effectData.lastDamageSource;
+					if (!target) {
+						this.add('-fail', pokemon);
+						return false;
+					}
+					if (!target.isActive) target = this.resolveTarget(pokemon, this.getMove('pound'));
+					if (!this.isAdjacent(pokemon, target)) {
+						this.add('-miss', pokemon, target);
+						return false;
+					}
+					let moveData = {
+						id: 'bide',
+						name: "Bide",
+						accuracy: 100,
+						damage: this.effectData.totalDamage * 2,
+						category: "Physical",
+						priority: 0,
+						flags: {contact: 1, protect: 1},
+						effectType: 'Move',
+						type: 'Normal',
+					};
+					this.tryMoveHit(target, pokemon, moveData);
+					return false;
+				}
+				this.add('-activate', pokemon, 'move: Bide');
+			},
+			onEnd: function (pokemon) {
+				this.add('-end', pokemon, 'move: Bide', '[silent]');
+			},
+		},
+	},
 	counter: {
 		inherit: true,
 		damageCallback: function (pokemon, target) {
@@ -43,6 +99,28 @@ exports.BattleMovedex = {
 	crosschop: {
 		inherit: true,
 		critRatio: 3,
+	},
+	curse: {
+		inherit: true,
+		effect: {
+			onStart: function (pokemon, source) {
+				this.add('-start', pokemon, 'Curse', '[of] ' + source);
+			},
+			onAfterMoveSelf: function (pokemon) {
+				this.damage(pokemon.maxhp / 4);
+			},
+		},
+	},
+	detect: {
+		inherit: true,
+		desc: "The user is protected from attacks made by the opponent during this turn. This move has an X/256 chance of being successful, where X starts at 255 and halves, rounded down, each time this move is successfully used. X resets to 255 if this move fails or if the user's last move used is not Detect, Endure, or Protect. Fails if the user moves last this turn.",
+		priority: 2,
+		onTryHit: function (pokemon) {
+			if (!pokemon.volatiles['stall']) {
+				this.debug("Success chance: 99.6% (255/256)");
+				return (this.random(256) < 255);
+			}
+		},
 	},
 	dig: {
 		inherit: true,
@@ -117,6 +195,17 @@ exports.BattleMovedex = {
 			},
 		},
 	},
+	endure: {
+		inherit: true,
+		desc: "The user will survive attacks made by the opponent during this turn with at least 1 HP. This move has an X/256 chance of being successful, where X starts at 255 and halves, rounded down, each time this move is successfully used. X resets to 255 if this move fails or if the user's last move used is not Detect, Endure, or Protect. Fails if the user moves last this turn.",
+		priority: 2,
+		onTryHit: function (pokemon) {
+			if (!pokemon.volatiles['stall']) {
+				this.debug("Success chance: 99.6% (255/256)");
+				return (this.random(256) < 255);
+			}
+		},
+	},
 	explosion: {
 		inherit: true,
 		basePower: 250,
@@ -156,6 +245,13 @@ exports.BattleMovedex = {
 			},
 		},
 	},
+	healbell: {
+		inherit: true,
+		onHit: function (target, source) {
+			this.add('-cureteam', source, '[from] move: Heal Bell');
+			source.side.pokemon.forEach(pokemon => pokemon.clearStatus());
+		},
+	},
 	highjumpkick: {
 		inherit: true,
 		onMoveFail: function (target, source, move) {
@@ -185,6 +281,7 @@ exports.BattleMovedex = {
 			onStart: function (target) {
 				this.add('-start', target, 'move: Leech Seed');
 			},
+			onAfterMoveSelfPriority: 2,
 			onAfterMoveSelf: function (pokemon) {
 				let leecher = pokemon.side.foe.active[pokemon.volatiles['leechseed'].sourcePosition];
 				if (!leecher || leecher.fainted || leecher.hp <= 0) {
@@ -310,6 +407,28 @@ exports.BattleMovedex = {
 			}
 		},
 	},
+	nightmare: {
+		inherit: true,
+		effect: {
+			noCopy: true,
+			onStart: function (pokemon) {
+				if (pokemon.status !== 'slp') {
+					return false;
+				}
+				this.add('-start', pokemon, 'Nightmare');
+			},
+			onAfterMoveSelfPriority: 1,
+			onAfterMoveSelf: function (pokemon) {
+				if (pokemon.status === 'slp') this.damage(pokemon.maxhp / 4);
+			},
+			onUpdate: function (pokemon) {
+				if (pokemon.status !== 'slp') {
+					pokemon.removeVolatile('nightmare');
+					this.add('-end', pokemon, 'Nightmare', '[silent]');
+				}
+			},
+		},
+	},
 	outrage: {
 		inherit: true,
 		onMoveFail: function (target, source, move) {
@@ -339,6 +458,17 @@ exports.BattleMovedex = {
 	poisonpowder: {
 		inherit: true,
 		ignoreImmunity: false,
+	},
+	protect: {
+		inherit: true,
+		desc: "The user is protected from attacks made by the opponent during this turn. This move has an X/256 chance of being successful, where X starts at 255 and halves, rounded down, each time this move is successfully used. X resets to 255 if this move fails or if the user's last move used is not Detect, Endure, or Protect. Fails if the user moves last this turn.",
+		priority: 2,
+		onTryHit: function (pokemon) {
+			if (!pokemon.volatiles['stall']) {
+				this.debug("Success chance: 99.6% (255/256)");
+				return (this.random(256) < 255);
+			}
+		},
 	},
 	psywave: {
 		inherit: true,

@@ -15,7 +15,7 @@ exports.BattleStatuses = {
 		// Damage reduction is handled directly in the battle-engine.js damage function
 		onResidualOrder: 9,
 		onResidual: function (pokemon) {
-			this.damage(pokemon.maxhp / 8);
+			this.damage(pokemon.maxhp / 16);
 		},
 	},
 	par: {
@@ -29,7 +29,7 @@ exports.BattleStatuses = {
 		},
 		onModifySpe: function (spe, pokemon) {
 			if (!pokemon.hasAbility('quickfeet')) {
-				return this.chainModify(0.25);
+				return this.chainModify(0.5);
 			}
 		},
 		onBeforeMovePriority: 1,
@@ -150,8 +150,6 @@ exports.BattleStatuses = {
 	confusion: {
 		// this is a volatile status
 		onStart: function (target, source, sourceEffect) {
-			let result = this.runEvent('TryConfusion', target, source, sourceEffect);
-			if (!result) return result;
 			if (sourceEffect && sourceEffect.id === 'lockedmove') {
 				this.add('-start', target, 'confusion', '[fatigue]');
 			} else {
@@ -170,7 +168,7 @@ exports.BattleStatuses = {
 				return;
 			}
 			this.add('-activate', pokemon, 'confusion');
-			if (this.random(2) === 0) {
+			if (this.random(3) > 0) {
 				return;
 			}
 			this.damage(this.getDamage(pokemon, pokemon, 40), pokemon, pokemon, {
@@ -203,6 +201,18 @@ exports.BattleStatuses = {
 	},
 	trapper: {
 		noCopy: true,
+	},
+	crit1: {
+		onStart: function (target, source, effect) {
+			if (effect && effect.id === 'zpower') {
+				this.add('-start', target, 'move: Focus Energy', '[zeffect]');
+			} else {
+				this.add('-start', target, 'move: Focus Energy');
+			}
+		},
+		onModifyCritRatio: function (critRatio) {
+			return critRatio + 1;
+		},
 	},
 	partiallytrapped: {
 		duration: 5,
@@ -278,6 +288,9 @@ exports.BattleStatuses = {
 		onLockMoveTarget: function () {
 			return this.effectData.targetLoc;
 		},
+		onMoveAborted: function (pokemon) {
+			pokemon.removeVolatile('twoturnmove');
+		},
 	},
 	choicelock: {
 		onStart: function (pokemon) {
@@ -347,15 +360,6 @@ exports.BattleStatuses = {
 				this.add('-end', target, 'move: ' + move.name);
 				target.removeVolatile('Protect');
 				target.removeVolatile('Endure');
-
-				if (target.hasAbility('wonderguard') && this.gen >= 5) {
-					this.debug('Wonder Guard immunity: ' + move.id);
-					if (target.runEffectiveness(move) <= 0) {
-						this.add('-activate', target, 'ability: Wonder Guard');
-						this.effectData.positions[i] = null;
-						return null;
-					}
-				}
 
 				if (posData.source.hasAbility('infiltrator') && this.gen >= 6) {
 					posData.moveData.infiltrates = true;
@@ -637,18 +641,31 @@ exports.BattleStatuses = {
 		},
 	},
 
+	// Arceus and Silvally's actual typing is implemented here.
+	// Their true typing for all their formes is Normal, and it's only
+	// Multitype and RKS System, respectively, that changes their type,
+	// but their formes are specified to be their corresponding type
+	// in the Pokedex, so that needs to be overridden.
+	// This is mainly relevant for Hackmons and Balanced Hackmons.
 	arceus: {
-		// Arceus's actual typing is implemented here
-		// Arceus's true typing for all its formes is Normal, and it's only
-		// Multitype that changes its type, but its formes are specified to
-		// be their corresponding type in the Pokedex, so that needs to be
-		// overridden. This is mainly relevant for Hackmons and Balanced
-		// Hackmons.
 		onSwitchInPriority: 101,
 		onSwitchIn: function (pokemon) {
 			let type = 'Normal';
 			if (pokemon.ability === 'multitype') {
 				type = pokemon.getItem().onPlate;
+				if (!type || type === true) {
+					type = 'Normal';
+				}
+			}
+			pokemon.setType(type, true);
+		},
+	},
+	silvally: {
+		onSwitchInPriority: 101,
+		onSwitchIn: function (pokemon) {
+			let type = 'Normal';
+			if (pokemon.ability === 'rkssystem') {
+				type = pokemon.getItem().onMemory;
 				if (!type || type === true) {
 					type = 'Normal';
 				}
