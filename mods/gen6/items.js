@@ -32,21 +32,17 @@ exports.BattleItems = {
 		inherit: true,
 		isUnreleased: false,
 	},
-	audinite: {
-		inherit: true,
-		isUnreleased: false,
-	},
 	banettite: {
-		inherit: true,
-		isUnreleased: false,
-	},
-	beedrillite: {
 		inherit: true,
 		isUnreleased: false,
 	},
 	belueberry: {
 		inherit: true,
 		isUnreleased: false,
+	},
+	bigroot: {
+		inherit: true,
+		desc: "Holder gains 1.3x HP from draining moves, Aqua Ring, Ingrain, and Leech Seed.",
 	},
 	blazikenite: {
 		inherit: true,
@@ -141,6 +137,10 @@ exports.BattleItems = {
 		inherit: true,
 		isUnreleased: false,
 	},
+	lightclay: {
+		inherit: true,
+		desc: "Holder's use of Light Screen or Reflect lasts 8 turns instead of 5.",
+	},
 	lopunnite: {
 		inherit: true,
 		isUnreleased: false,
@@ -172,22 +172,6 @@ exports.BattleItems = {
 		inherit: true,
 		isUnreleased: false,
 	},
-	mawilite: {
-		inherit: true,
-		isUnreleased: false,
-	},
-	medichamite: {
-		inherit: true,
-		isUnreleased: false,
-	},
-	mewtwonitex: {
-		inherit: true,
-		isUnreleased: false,
-	},
-	mewtwonitey: {
-		inherit: true,
-		isUnreleased: false,
-	},
 	micleberry: {
 		inherit: true,
 		isUnreleased: false,
@@ -201,10 +185,6 @@ exports.BattleItems = {
 		isUnreleased: false,
 	},
 	pamtreberry: {
-		inherit: true,
-		isUnreleased: false,
-	},
-	pidgeotite: {
 		inherit: true,
 		isUnreleased: false,
 	},
@@ -240,10 +220,6 @@ exports.BattleItems = {
 		isUnreleased: false,
 	},
 	spelonberry: {
-		inherit: true,
-		isUnreleased: false,
-	},
-	steelixite: {
 		inherit: true,
 		isUnreleased: false,
 	},

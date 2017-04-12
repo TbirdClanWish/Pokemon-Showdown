@@ -28,7 +28,7 @@ exports.commands = {
 		let targetUser = this.targetUserOrSelf(target, user.group === ' ');
 		let showAll = (cmd === 'ip' || cmd === 'whoare' || cmd === 'alt' || cmd === 'alts');
 		if (!targetUser) {
-			if (showAll) return this.parse('/checkpunishment ' + target);
+			if (showAll) return this.parse('/offlinewhois ' + target);
 			return this.errorReply("User " + this.targetUsername + " not found.");
 		}
 		if (showAll && !user.trusted && targetUser !== user) {
@@ -128,6 +128,7 @@ exports.commands = {
 		}
 		if ((user.can('ip', targetUser) || user === targetUser)) {
 			let ips = Object.keys(targetUser.ips);
+			ips = ips.map(ip => ip + (Punishments.sharedIps.has(ip) ? ' (shared)' : ''));
 			buf += `<br /> IP${Chat.plural(ips)}: ${ips.join(", ")}`;
 			if (user.group !== ' ' && targetUser.latestHost) {
 				buf += Chat.html`<br />Host: ${targetUser.latestHost}`;
@@ -141,7 +142,7 @@ exports.commands = {
 		}
 
 		if (user.can('alts', targetUser) || (room.isPrivate !== true && user.can('mute', targetUser, room) && targetUser.userid in room.users)) {
-			let punishments = Punishments.getRoomPunishments(targetUser);
+			let punishments = Punishments.getRoomPunishments(targetUser, {checkIps: true});
 
 			if (punishments.length) {
 				buf += `<br />Room punishments: `;
@@ -165,16 +166,28 @@ exports.commands = {
 	whoishelp: ["/whois - Get details on yourself: alts, group, IP address, and rooms.",
 		"/whois [username] - Get details on a username: alts (Requires: % @ * & ~), group, IP address (Requires: @ * & ~), and rooms."],
 
-	'!checkpunishment': true,
-	checkpunishment: function (target, room, user) {
+	'!offlinewhois': true,
+	checkpunishment: 'offlinewhois',
+	offlinewhois: function (target, room, user) {
 		if (!user.trusted) {
-			return this.errorReply("/checkpunishment - Access denied.");
+			return this.errorReply("/offlinewhois - Access denied.");
 		}
 		let userid = toId(target);
 		if (!userid) return this.errorReply("Please enter a valid username.");
 		let targetUser = Users(userid);
 		let buf = Chat.html`<strong class="username">${target}</strong>`;
 		if (!targetUser || !targetUser.connected) buf += ` <em style="color:gray">(offline)</em>`;
+
+		let roomauth = '';
+		if (room && room.auth && userid in room.auth) roomauth = room.auth[userid];
+		if (Config.groups[roomauth] && Config.groups[roomauth].name) {
+			buf += `<br />${Config.groups[roomauth].name} (${roomauth})`;
+		}
+		let group = (Users.usergroups[userid] || '').charAt(0);
+		if (Config.groups[group] && Config.groups[group].name) {
+			buf += `<br />Global ${Config.groups[group].name} (${group})`;
+		}
+
 		buf += `<br /><br />`;
 		let atLeastOne = false;
 
@@ -283,6 +296,34 @@ exports.commands = {
 		return this.sendReply(results.join('; '));
 	},
 	ipsearchhelp: ["/ipsearch [ip|range|host] - Find all users with specified IP, IP range, or host. Requires: & ~"],
+
+	checkchallenges: function (target, room, user) {
+		if (!this.can('ban', null, room)) return false;
+		if (!this.runBroadcast()) return;
+		if (!this.broadcasting) {
+			this.errorReply(`This command must be broadcast:`);
+			return this.parse(`/help checkchallenges`);
+		}
+		target = this.splitTarget(target);
+		const user1 = this.targetUser;
+		const user2 = Users.get(target);
+		if (!user1 || !user2 || user1 === user2) return this.parse(`/help checkchallenges`);
+		if (!(user1 in room.users) || !(user2 in room.users)) {
+			return this.errorReply(`Both users must be in this room.`);
+		}
+		let challenges = [];
+		if (user1.challengeTo && user1.challengeTo.to === user2.userid) {
+			challenges.push(Chat.html`${user1.name} is challenging ${user2.name} in ${Tools.getFormat(user1.challengeTo.format).name}.`);
+		}
+		if (user2.challengeTo && user2.challengeTo.to === user1.userid) {
+			challenges.push(Chat.html`${user2.name} is challenging ${user1.name} in ${Tools.getFormat(user2.challengeTo.format).name}.`);
+		}
+		if (!challenges.length) {
+			return this.sendReplyBox(Chat.html`${user1.name} and ${user2.name} are not challenging each other.`);
+		}
+		this.sendReplyBox(challenges.join(`<br />`));
+	},
+	checkchallengeshelp: ["!checkchallenges [user1], [user2] - Check if the specified users are challenging each other. Requires: @ * # & ~"],
 
 	/*********************************************************
 	 * Client fallback
@@ -1047,24 +1088,49 @@ exports.commands = {
 	'!groups': true,
 	groups: function (target, room, user) {
 		if (!this.runBroadcast()) return;
+		const showRoom = (target !== 'global');
+		const showGlobal = (target !== 'room' && target !== 'rooms');
 		this.sendReplyBox(
-			"<b>Room Rank</b><br />" +
-			"+ <b>Voice</b> - They can use ! commands like !groups, and talk during moderated chat<br />" +
-			"% <b>Driver</b> - The above, and they can mute and warn<br />" +
-			"@ <b>Moderator</b> - The above, and they can room ban users<br />" +
-			"* <b>Bot</b> - Like Moderator, but makes it clear that this user is a bot<br />" +
-			"# <b>Room Owner</b> - They are leaders of the room and can almost totally control it<br /><br />" +
-			"<b>Global Rank</b><br />" +
-			"+ <b>Global Voice</b> - They can use ! commands like !groups, and talk during moderated chat<br />" +
-			"% <b>Global Driver</b> - The above, and they can also lock users and check for alts<br />" +
-			"@ <b>Global Moderator</b> - The above, and they can globally ban users<br />" +
-			"* <b>Global Bot</b> - Like Moderator, but makes it clear that this user is a bot<br />" +
-			"&amp; <b>Global Leader</b> - The above, and they can promote to global moderator and force ties<br />" +
-			"~ <b>Global Administrator</b> -  They can do anything, like change what this message says"
+			(showRoom ? `<strong>Room ranks</strong><br />` +
+			`+ <strong>Voice</strong> - They can use ! commands like !groups, and talk during moderated chat<br />` +
+			`% <strong>Driver</strong> - The above, and they can mute and warn<br />` +
+			`@ <strong>Moderator</strong> - The above, and they can room ban users<br />` +
+			`* <strong>Bot</strong> - Like Moderator, but makes it clear that this user is a bot<br />` +
+			`# <strong>Room Owner</strong> - They are leaders of the room and can almost totally control it<br />` : ``) +
+			(showRoom && showGlobal ? `<br />` : ``) +
+			(showGlobal ? `<strong>Global ranks</strong><br />` +
+			`+ <strong>Global Voice</strong> - They can use ! commands like !groups, and talk during moderated chat<br />` +
+			`% <strong>Global Driver</strong> - The above, and they can also lock users and check for alts<br />` +
+			`@ <strong>Global Moderator</strong> - The above, and they can globally ban users<br />` +
+			`* <strong>Global Bot</strong> - Like Moderator, but makes it clear that this user is a bot<br />` +
+			`&amp; <strong>Global Leader</strong> - The above, and they can promote to global moderator and force ties<br />` +
+			`~ <strong>Global Administrator</strong> -  They can do anything, like change what this message says` : ``)
 		);
 	},
 	groupshelp: ["/groups - Explains what the symbols (like % and @) before people's names mean.",
+		"/groups [global|room] - Explains only global or room symbols.",
 		"!groups - Shows everyone that information. Requires: + % @ * # & ~"],
+
+	'!punishments': true,
+	punishments: function (target, room, user) {
+		if (!this.runBroadcast()) return;
+		this.sendReplyBox(
+			"<strong>Room punishments</strong>:<br />" +
+			"<strong>warn</strong> - Displays a popup with the rules.<br />" +
+			"<strong>mute</strong> - Mutes a user (makes them unable to talk) for 7 minutes.<br />" +
+			"<strong>hourmute</strong> - Mutes a user for 60 minutes.<br />" +
+			"<strong>ban</strong> - Bans a user (makes them unable to join the room) for 2 days.<br />" +
+			"<strong>blacklist</strong> - Bans a user for a year.<br />" +
+			"<br />" +
+			"<strong>Global punishments</strong>:<br />" +
+			"<strong>lock</strong> - Locks a user (makes them unable to talk in any rooms or PM non-staff) for 2 days.<br />" +
+			"<strong>weeklock</strong> - Locks a user for a week.<br />" +
+			"<strong>namelock</strong> - Locks a user and prevents them from having a username for 2 days.<br />" +
+			"<strong>globalban</strong> - Globally bans (makes them unable to connect and play games) for a week."
+		);
+	},
+	punishmentshelp: ["/punishments - Explains punishments.",
+		"!punishments - Show everyone that information. Requires: + % @ * # & ~"],
 
 	'!opensource': true,
 	repo: 'opensource',
@@ -1187,10 +1253,10 @@ exports.commands = {
 			"- <a href=\"https://www.smogon.com/cap/\">CAP project website and description</a><br />" +
 			"- <a href=\"https://www.smogon.com/forums/threads/48782/\">What Pok&eacute;mon have been made?</a><br />" +
 			"- <a href=\"https://www.smogon.com/forums/forums/311\">Talk about the metagame here</a><br />" +
-			"- <a href=\"https://www.smogon.com/forums/threads/3512318/\">Sample XY CAP teams</a>"
+			"- <a href=\"https://www.smogon.com/forums/threads/3593752/\">Sample SM CAP teams</a>"
 		);
 	},
-	caphelp: ["/cap - Provides an introduction to the Create-A-Pok&eacute;mon project.",
+	caphelp: ["/cap - Provides an introduction to the Create-A-Pok\u00e9mon project.",
 		"!cap - Show everyone that information. Requires: + % @ * # & ~"],
 
 	'!gennext': true,
@@ -1217,8 +1283,8 @@ exports.commands = {
 		}
 
 		if (!target || target === 'all') {
-			buffer += "- <a href=\"https://www.smogon.com/forums/forums/other-metagames.206/\">Other Metagames Forum</a><br />";
-			buffer += "- <a href=\"https://www.smogon.com/forums/forums/other-metagames-analyses.310/\">Other Metagames Analyses</a><br />";
+			buffer += "- <a href=\"https://www.smogon.com/forums/forums/other-metagames.394/\">Other Metagames Forum</a><br />";
+			buffer += "- <a href=\"https://www.smogon.com/forums/forums/om-analyses.416/\">Other Metagames Analyses</a><br />";
 			if (!target) return this.sendReplyBox(buffer);
 		}
 		let showMonthly = (target === 'all' || target === 'omofthemonth' || target === 'omotm' || target === 'month');
@@ -1457,6 +1523,9 @@ exports.commands = {
 		if (showAll || target === 'tiering' || target === 'tiers' || target === 'tier') {
 			buffer.push("<a href=\"https://www.smogon.com/ingame/battle/tiering-faq\">Tiering FAQ</a>");
 		}
+		if (showAll || target === 'badge' || target === 'badges') {
+			buffer.push("<a href=\"http://www.smogon.com/badge_faq\">Badge FAQ</a>");
+		}
 		if (showAll || !buffer.length) {
 			buffer.unshift("<a href=\"https://www.smogon.com/forums/threads/3570628/#post-6774128\">Frequently Asked Questions</a>");
 		}
@@ -1478,12 +1547,15 @@ exports.commands = {
 		let ability = Tools.getAbility(targets[0]);
 		let format = Tools.getFormat(targets[0]);
 		let atLeastOne = false;
-		let generation = (targets[1] || 'xy').trim().toLowerCase();
-		let genNumber = 6;
+		let generation = (targets[1] || 'sm').trim().toLowerCase();
+		let genNumber = 7;
 		let extraFormat = Tools.getFormat(targets[2]);
 
-		if (generation === 'xy' || generation === 'oras' || generation === '6' || generation === 'six') {
+		if (generation === 'sm' || generation === 'sumo' || generation === '7' || generation === 'seven') {
+			generation = 'sm';
+		} else if (generation === 'xy' || generation === 'oras' || generation === '6' || generation === 'six') {
 			generation = 'xy';
+			genNumber = 6;
 		} else if (generation === 'bw' || generation === 'bw2' || generation === '5' || generation === 'five') {
 			generation = 'bw';
 			genNumber = 5;
@@ -1500,7 +1572,7 @@ exports.commands = {
 			generation = 'rb';
 			genNumber = 1;
 		} else {
-			generation = 'xy';
+			generation = 'sm';
 		}
 
 		// Pokemon
@@ -1514,13 +1586,20 @@ exports.commands = {
 				this.errorReply("CAP is not currently supported by Smogon Strategic Pokedex.");
 			}
 
-			if (pokemon.battleOnly || pokemon.baseSpecies === 'Keldeo' || pokemon.baseSpecies === 'Genesect') {
+			if ((pokemon.battleOnly && pokemon.baseSpecies !== 'Greninja') || pokemon.baseSpecies === 'Keldeo' || pokemon.baseSpecies === 'Genesect') {
 				pokemon = Tools.getTemplate(pokemon.baseSpecies);
 			}
 
 			let formatName = extraFormat.name;
 			let formatId = extraFormat.id;
-			if (formatId === 'doublesou') {
+			if (formatId === 'battlespotdoubles') {
+				formatId = 'battle_spot_doubles';
+			} else if (formatId === 'battlespottriples') {
+				formatId = 'battle_spot_triples';
+				if (genNumber > 6) {
+					this.sendReplyBox("Triples formats are not an available format in Pok&eacute;mon generation " + generation.toUpperCase() + ".");
+				}
+			} else if (formatId === 'doublesou') {
 				formatId = 'doubles';
 			} else if (formatId === 'balancedhackmons') {
 				formatId = 'bh';
@@ -1533,7 +1612,7 @@ exports.commands = {
 				formatName = formatId = '';
 			}
 			let speciesid = pokemon.speciesid;
-			// Special case for Meowstic-M and Hoopa-Unbound
+			// Special case for Meowstic-M
 			if (speciesid === 'meowstic') speciesid = 'meowsticm';
 			if (pokemon.tier === 'CAP') {
 				this.sendReplyBox("<a href=\"https://www.smogon.com/cap/pokemon/strategies/" + speciesid + "\">" + generation.toUpperCase() + " " + Chat.escapeHTML(formatName) + " " + pokemon.name + " analysis preview</a>, brought to you by <a href=\"https://www.smogon.com\">Smogon University</a> <a href=\"https://smogon.com/cap/\">CAP Project</a>");
@@ -1564,10 +1643,19 @@ exports.commands = {
 		if (format.id) {
 			let formatName = format.name;
 			let formatId = format.id;
-			if (formatId === 'doublesou') {
+			if (formatId === 'battlespotdoubles') {
+				formatId = 'battle_spot_doubles';
+			} else if (formatId === 'battlespottriples') {
+				formatId = 'battle_spot_triples';
+				if (genNumber > 6) {
+					this.sendReplyBox("Triples formats are not an available format in Pok&eacute;mon generation " + generation.toUpperCase() + ".");
+				}
+			} else if (formatId === 'doublesou') {
 				formatId = 'doubles';
 			} else if (formatId === 'balancedhackmons') {
 				formatId = 'bh';
+			} else if (formatId === 'battlespotsingles') {
+				formatId = 'battle_spot_singles';
 			} else if (formatId.includes('vgc')) {
 				formatId = 'vgc' + formatId.slice(-2);
 				formatName = 'VGC20' + formatId.slice(-2);
